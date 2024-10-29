@@ -1,0 +1,7 @@
+streamlit
+requests
+pypdf
+langchain
+scikit-learn
+pygame
+pytesseract

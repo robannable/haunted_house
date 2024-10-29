@@ -1,0 +1,13 @@
+{
+    "year_built": "1968",
+    "architectural_style": "Mid-century Modern",
+    "primary_materials": ["stone", "timber", "slate"],
+    "rooms": ["living_room", "kitchen", "bedrooms", "bathroom", "garden"],
+    "home_systems": ["central_heating", "plumbing", "electrical"],
+    "sun_orientation": "south_facing",
+    "renovation_history": [
+        {"year": 1975, "work": "kitchen_extension"},
+        {"year": 2000, "work": "loft_conversion"},
+        {"year": 2015, "work": "solar_panels"}
+    ]
+}

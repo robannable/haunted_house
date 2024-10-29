@@ -1,0 +1,5 @@
+<em>/home</em>
+
+This project uses a Large Language Model (LLM) to simulate a conversation with a house. Responses are a combination of information present in the model's dataset plus chosen documents related to their work and associated texts, using Retrieval Augmented Generation (RAG) to fine tune the knowledge base.
+
+Coded with the assistance of <a href="https://www.perplexity.ai/">Perplexity AI and API service</a>.
