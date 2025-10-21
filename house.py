@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import streamlit as st
-import requests
+import anthropic
 import json
 import pygame
 import csv
@@ -19,10 +19,11 @@ from typing import Optional, List, Dict, Tuple
 
 # Load environment variables
 load_dotenv()
-PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
 
-if not PERPLEXITY_API_KEY:
-    raise ValueError("PERPLEXITY_API_KEY not found in environment variables")
+if not ANTHROPIC_API_KEY:
+    raise ValueError("ANTHROPIC_API_KEY not found in environment variables. Please check your .env file.")
 
 # Initialize pygame for audio
 pygame.mixer.init()
@@ -368,12 +369,12 @@ def get_all_chat_history(resident_name: str, logs_dir: str) -> List[Dict]:
 
 def get_house_response_streaming(resident_name: str, room: str, question: str):
     """
-    Get streaming response from house spirit using configured prompts and API.
+    Get streaming response from house spirit using Anthropic Claude API.
 
     Yields:
         dict: Dictionary with 'chunk' (text), 'filenames', and 'chunk_info' keys
     """
-    if not PERPLEXITY_API_KEY:
+    if not ANTHROPIC_API_KEY:
         yield {
             'chunk': "I apologize, but I cannot access my memory banks without proper authorization (API key not found).",
             'filenames': [],
@@ -421,47 +422,25 @@ def get_house_response_streaming(resident_name: str, room: str, question: str):
     Current date: {datetime.now().strftime("%d-%m-%Y")}
     Question: {question}"""
 
-    # Call Perplexity API with streaming
-    url = "https://api.perplexity.ai/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "model": "llama-3.1-70b-instruct",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ],
-        "stream": True
-    }
-
+    # Call Anthropic API with streaming
     try:
-        response = requests.post(url, headers=headers, json=data, stream=True)
-        response.raise_for_status()
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-        for line in response.iter_lines():
-            if line:
-                line = line.decode('utf-8')
-                if line.startswith('data: '):
-                    line = line[6:]  # Remove 'data: ' prefix
-                    if line == '[DONE]':
-                        break
-                    try:
-                        chunk_data = json.loads(line)
-                        if 'choices' in chunk_data and chunk_data['choices']:
-                            delta = chunk_data['choices'][0].get('delta', {})
-                            content = delta.get('content', '')
-                            if content:
-                                yield {
-                                    'chunk': content,
-                                    'filenames': list(set(context_filenames)),
-                                    'chunk_info': chunk_info,
-                                    'done': False
-                                }
-                    except json.JSONDecodeError:
-                        continue
+        with client.messages.stream(
+            model=ANTHROPIC_MODEL,
+            max_tokens=2048,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        ) as stream:
+            for text in stream.text_stream:
+                yield {
+                    'chunk': text,
+                    'filenames': list(set(context_filenames)),
+                    'chunk_info': chunk_info,
+                    'done': False
+                }
 
         # Signal completion
         yield {
@@ -480,8 +459,8 @@ def get_house_response_streaming(resident_name: str, room: str, question: str):
         }
 
 def get_house_response(resident_name: str, room: str, question: str) -> Tuple[str, List[str], List[str]]:
-    """Get response from house spirit using configured prompts and API (non-streaming)."""
-    if not PERPLEXITY_API_KEY:
+    """Get response from house spirit using Anthropic Claude API (non-streaming)."""
+    if not ANTHROPIC_API_KEY:
         return "I apologize, but I cannot access my memory banks without proper authorization (API key not found).", [], []
 
     # Load and validate house configuration
@@ -512,38 +491,29 @@ def get_house_response(resident_name: str, room: str, question: str) -> Tuple[st
     Current date: {datetime.now().strftime("%d-%m-%Y")}
     Question: {question}"""
 
-    # Call Perplexity API
-    url = "https://api.perplexity.ai/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "model": "llama-3.1-70b-instruct",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
-    }
-
+    # Call Anthropic API
     try:
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
-        response_json = response.json()
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-        if "choices" in response_json and response_json["choices"]:
-            chunk_info = [
-                f"{filename} (chunk {i+1}, score: {similarities[top_indices[i]]:.4f})"
-                for i, filename in enumerate(context_filenames)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=2048,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message}
             ]
-            return (
-                response_json["choices"][0]["message"]["content"],
-                list(set(context_filenames)),
-                chunk_info
-            )
-        else:
-            return "I seem to be having trouble accessing my memories...", [], []
+        )
+
+        chunk_info = [
+            f"{filename} (chunk {i+1}, score: {similarities[top_indices[i]]:.4f})"
+            for i, filename in enumerate(context_filenames)
+        ]
+
+        return (
+            message.content[0].text,
+            list(set(context_filenames)),
+            chunk_info
+        )
     except Exception as e:
         return f"I apologize, but I'm having difficulty processing your question: {str(e)}", [], []
 

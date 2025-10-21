@@ -18,7 +18,7 @@ An AI-powered chatbot that personifies your house as a caring spirit with knowle
 ### Prerequisites
 
 - Python 3.8+
-- Perplexity API key ([get one here](https://www.perplexity.ai/))
+- Anthropic API key ([get one here](https://console.anthropic.com/))
 
 ### Installation
 
@@ -42,7 +42,8 @@ An AI-powered chatbot that personifies your house as a caring spirit with knowle
 4. **Configure environment variables**
    ```bash
    cp .env.example .env
-   # Edit .env and add your Perplexity API key
+   # Edit .env and add your Anthropic API key
+   # Optionally customize the Claude model (default: claude-3-5-sonnet-20241022)
    ```
 
 5. **Run the application**
@@ -76,6 +77,26 @@ Edit `config/house_config.json` to customize your house's details:
 
 Customize the AI's personality by editing `prompts/house_spirit_prompt.txt`
 
+### Model Selection
+
+Configure which Claude model to use in your `.env` file:
+
+```bash
+# Choose your Claude model
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022  # Default: Best balance
+
+# Other options:
+# ANTHROPIC_MODEL=claude-3-opus-20240229      # Most capable, slower, more expensive
+# ANTHROPIC_MODEL=claude-3-sonnet-20240229    # Balanced performance
+# ANTHROPIC_MODEL=claude-3-haiku-20240307     # Fastest, most affordable
+```
+
+**Model Comparison:**
+- **Claude 3.5 Sonnet** (default): Best choice for most users - excellent intelligence with good speed
+- **Claude 3 Opus**: Use when you need maximum reasoning capability for complex questions
+- **Claude 3 Sonnet**: Good balance of speed and capability for general use
+- **Claude 3 Haiku**: Choose for fastest responses and lower costs on simple queries
+
 ### Knowledge Base
 
 Add documents to these directories:
@@ -98,7 +119,11 @@ Supported formats:
    - Finds top-3 most relevant chunks via cosine similarity
 
 2. **LLM Integration**
-   - Perplexity API with llama-3.1-70b-instruct model
+   - Anthropic Claude API with configurable models:
+     - Claude 3.5 Sonnet (default) - Best balance of intelligence and speed
+     - Claude 3 Opus - Maximum capability for complex reasoning
+     - Claude 3 Sonnet - Good balance of speed and intelligence
+     - Claude 3 Haiku - Fastest responses for simple queries
    - Supports both streaming and non-streaming modes
    - Custom system prompts configure the house personality
 
@@ -124,7 +149,7 @@ Find Top-3 Relevant Document Chunks (cosine similarity)
     ↓
 Build Context + System Prompt
     ↓
-Perplexity API (llama-3.1-70b-instruct)
+Anthropic Claude API (configurable model)
     ↓
 Stream Response to UI + Log Everything
 ```
@@ -165,8 +190,9 @@ haunted_house/
 
 ## Recent Improvements
 
+- ✅ **Anthropic Claude Integration**: Migrated from Perplexity to Anthropic's Claude models with configurable model selection
 - ✅ **Semantic Search**: Upgraded from TF-IDF to sentence-transformers embeddings for better context retrieval
-- ✅ **Streaming Responses**: Added real-time response generation with toggle option
+- ✅ **Streaming Responses**: Added real-time response generation with toggle option using Claude's streaming API
 - ✅ **Environment Security**: Added `.env` support and comprehensive `.gitignore`
 - ✅ **Bug Fixes**: Fixed missing pytesseract import
 - ✅ **Documentation**: Comprehensive README with architecture diagrams
@@ -190,21 +216,30 @@ streamlit run house.py
 ## Troubleshooting
 
 **"API key not found" error**
-- Ensure `.env` file exists with `PERPLEXITY_API_KEY=your_key_here`
+- Ensure `.env` file exists with `ANTHROPIC_API_KEY=your_key_here`
+- Get your API key from https://console.anthropic.com/
 
 **Slow first response**
 - First run downloads the sentence-transformer model (~80MB)
 - Subsequent runs use cached model
+- Consider using Claude 3 Haiku for faster responses
 
 **OCR not working**
 - Install tesseract: `brew install tesseract` (Mac) or `apt-get install tesseract-ocr` (Linux)
 
 **Streaming responses not working**
-- Check Perplexity API supports streaming
+- Verify your Anthropic API key is valid
 - Try disabling streaming with the checkbox
+- Check your internet connection
+
+**Rate limit errors**
+- Anthropic has rate limits based on your account tier
+- Consider upgrading your Anthropic account or using a different model
+- Try spacing out your requests
 
 ## Credits
 
+- Powered by [Anthropic Claude](https://www.anthropic.com/) AI models
 - Built with assistance from [Perplexity AI](https://www.perplexity.ai/)
 - Inspired by the concept of "Object Oriented Hauntology"
 - House: Hafod, a mid-century modern home in Wolverhampton, UK (1968-1970)
@@ -216,11 +251,13 @@ See LICENSE file for details.
 ## Contributing
 
 Contributions welcome! Areas for improvement:
-- Vector database integration (ChromaDB, Pinecone)
-- Multi-model support (Claude, GPT-4, local models)
-- Smart home sensor integration
-- Voice interface
-- Mobile app
+- Vector database integration (ChromaDB, Pinecone, Weaviate)
+- Additional LLM providers (OpenAI GPT-4, local models via Ollama)
+- Smart home sensor integration (temperature, humidity, energy usage)
+- Voice interface with speech-to-text and text-to-speech
+- Mobile app (React Native or Flutter)
+- Conversation context across multiple questions in a session
+- Analytics dashboard for insights from conversation history
 
 ---
 

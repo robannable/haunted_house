@@ -1,5 +1,5 @@
 streamlit
-requests
+anthropic
 pypdf
 langchain
 scikit-learn
