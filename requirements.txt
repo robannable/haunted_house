@@ -5,3 +5,7 @@ langchain
 scikit-learn
 pygame
 pytesseract
+python-dotenv
+Pillow
+sentence-transformers
+torch

@@ -9,8 +9,10 @@ from datetime import datetime
 from pypdf import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from PIL import Image
+import pytesseract
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 import numpy as np
 import html
 from typing import Optional, List, Dict, Tuple
@@ -364,8 +366,121 @@ def get_all_chat_history(resident_name: str, logs_dir: str) -> List[Dict]:
 
     return sorted(history, key=lambda x: (x['date'], x['time']), reverse=True)
 
+def get_house_response_streaming(resident_name: str, room: str, question: str):
+    """
+    Get streaming response from house spirit using configured prompts and API.
+
+    Yields:
+        dict: Dictionary with 'chunk' (text), 'filenames', and 'chunk_info' keys
+    """
+    if not PERPLEXITY_API_KEY:
+        yield {
+            'chunk': "I apologize, but I cannot access my memory banks without proper authorization (API key not found).",
+            'filenames': [],
+            'chunk_info': [],
+            'done': True
+        }
+        return
+
+    # Load and validate house configuration
+    house_config = load_house_config()
+    if not validate_house_config(house_config):
+        yield {
+            'chunk': "I seem to be having trouble remembering my configuration...",
+            'filenames': [],
+            'chunk_info': [],
+            'done': True
+        }
+        return
+
+    house_spirit = HouseSpiritSystem(house_config)
+    base_prompt = get_house_prompt()
+    system_prompt = house_spirit.create_house_prompt(base_prompt)
+
+    # Get relevant document chunks using semantic embeddings
+    question_embedding = embedding_model.encode([question])
+
+    # Compute cosine similarity between question and all document chunks
+    similarities = cosine_similarity(question_embedding, document_embeddings).flatten()
+    top_indices = similarities.argsort()[-3:][::-1]
+
+    context_chunks_with_filenames = [document_chunks_with_filenames[i] for i in top_indices]
+    context_chunks = [chunk for chunk, _ in context_chunks_with_filenames]
+    context_filenames = [filename for _, filename in context_chunks_with_filenames]
+
+    chunk_info = [
+        f"{filename} (chunk {i+1}, score: {similarities[top_indices[i]]:.4f})"
+        for i, filename in enumerate(context_filenames)
+    ]
+
+    # Prepare the prompt with context
+    user_message = f"""Context from my memory: {' '.join(context_chunks)}
+
+    Current room focus: {room}
+    Resident name: {resident_name}
+    Current date: {datetime.now().strftime("%d-%m-%Y")}
+    Question: {question}"""
+
+    # Call Perplexity API with streaming
+    url = "https://api.perplexity.ai/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "llama-3.1-70b-instruct",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        "stream": True
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data, stream=True)
+        response.raise_for_status()
+
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                if line.startswith('data: '):
+                    line = line[6:]  # Remove 'data: ' prefix
+                    if line == '[DONE]':
+                        break
+                    try:
+                        chunk_data = json.loads(line)
+                        if 'choices' in chunk_data and chunk_data['choices']:
+                            delta = chunk_data['choices'][0].get('delta', {})
+                            content = delta.get('content', '')
+                            if content:
+                                yield {
+                                    'chunk': content,
+                                    'filenames': list(set(context_filenames)),
+                                    'chunk_info': chunk_info,
+                                    'done': False
+                                }
+                    except json.JSONDecodeError:
+                        continue
+
+        # Signal completion
+        yield {
+            'chunk': '',
+            'filenames': list(set(context_filenames)),
+            'chunk_info': chunk_info,
+            'done': True
+        }
+
+    except Exception as e:
+        yield {
+            'chunk': f"I apologize, but I'm having difficulty processing your question: {str(e)}",
+            'filenames': [],
+            'chunk_info': [],
+            'done': True
+        }
+
 def get_house_response(resident_name: str, room: str, question: str) -> Tuple[str, List[str], List[str]]:
-    """Get response from house spirit using configured prompts and API."""
+    """Get response from house spirit using configured prompts and API (non-streaming)."""
     if not PERPLEXITY_API_KEY:
         return "I apologize, but I cannot access my memory banks without proper authorization (API key not found).", [], []
 
@@ -373,23 +488,25 @@ def get_house_response(resident_name: str, room: str, question: str) -> Tuple[st
     house_config = load_house_config()
     if not validate_house_config(house_config):
         return "I seem to be having trouble remembering my configuration...", [], []
-    
+
     house_spirit = HouseSpiritSystem(house_config)
     base_prompt = get_house_prompt()
     system_prompt = house_spirit.create_house_prompt(base_prompt)
- 
-    # Get relevant document chunks
-    prompt_vector = vectorizer.transform([question])
-    cosine_similarities = cosine_similarity(prompt_vector, tfidf_matrix).flatten()
-    top_indices = cosine_similarities.argsort()[-3:][::-1]
-    
+
+    # Get relevant document chunks using semantic embeddings
+    question_embedding = embedding_model.encode([question])
+
+    # Compute cosine similarity between question and all document chunks
+    similarities = cosine_similarity(question_embedding, document_embeddings).flatten()
+    top_indices = similarities.argsort()[-3:][::-1]
+
     context_chunks_with_filenames = [document_chunks_with_filenames[i] for i in top_indices]
     context_chunks = [chunk for chunk, _ in context_chunks_with_filenames]
     context_filenames = [filename for _, filename in context_chunks_with_filenames]
-    
+
     # Prepare the prompt with context
     user_message = f"""Context from my memory: {' '.join(context_chunks)}
-    
+
     Current room focus: {room}
     Resident name: {resident_name}
     Current date: {datetime.now().strftime("%d-%m-%Y")}
@@ -398,10 +515,10 @@ def get_house_response(resident_name: str, room: str, question: str) -> Tuple[st
     # Call Perplexity API
     url = "https://api.perplexity.ai/chat/completions"
     headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",  # Using environment variable instead of st.secrets
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     data = {
         "model": "llama-3.1-70b-instruct",
         "messages": [
@@ -414,10 +531,10 @@ def get_house_response(resident_name: str, room: str, question: str) -> Tuple[st
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
         response_json = response.json()
-        
+
         if "choices" in response_json and response_json["choices"]:
             chunk_info = [
-                f"{filename} (chunk {i+1}, score: {cosine_similarities[top_indices[i]]:.4f})"
+                f"{filename} (chunk {i+1}, score: {similarities[top_indices[i]]:.4f})"
                 for i, filename in enumerate(context_filenames)
             ]
             return (
@@ -431,28 +548,31 @@ def get_house_response(resident_name: str, room: str, question: str) -> Tuple[st
         return f"I apologize, but I'm having difficulty processing your question: {str(e)}", [], []
 
 @st.cache_resource
-def compute_tfidf_matrix(document_chunks: List[Tuple[str, str]]):
+def compute_embeddings(document_chunks: List[Tuple[str, str]]):
     """
-    Compute TF-IDF matrix for document chunks.
-    
+    Compute semantic embeddings for document chunks using sentence-transformers.
+
     Args:
         document_chunks: List of tuples containing (text_chunk, filename)
-    
+
     Returns:
-        tuple: (TfidfVectorizer, sparse matrix of TF-IDF features)
+        tuple: (SentenceTransformer model, numpy array of embeddings)
     """
     # Extract just the text chunks, ignoring filenames for vectorization
     documents = [chunk for chunk, _ in document_chunks]
-    
-    # Create and fit the TF-IDF vectorizer
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(documents)
-    
-    return vectorizer, tfidf_matrix
+
+    # Load a high-quality sentence transformer model
+    # all-MiniLM-L6-v2 is fast and efficient for semantic search
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    # Encode all document chunks into embeddings
+    embeddings = model.encode(documents, show_progress_bar=False)
+
+    return model, embeddings
 
 # Initialize document processing
 document_chunks_with_filenames = load_documents(['documents', 'history'])
-vectorizer, tfidf_matrix = compute_tfidf_matrix(document_chunks_with_filenames)
+embedding_model, document_embeddings = compute_embeddings(document_chunks_with_filenames)
 
 # Streamlit UI
 st.title("Your House Spirit")
@@ -486,40 +606,88 @@ room_options = ['Whole House', 'Living Room', 'Kitchen', 'Bedroom', 'Bathroom', 
 selected_room = st.selectbox("Which space would you like to discuss?", room_options)
 question = st.text_area("What would you like to ask your house?")
 
+# Toggle for streaming mode
+use_streaming = st.checkbox('Enable streaming responses', value=True)
+
 # In your main Streamlit interface
 if st.button('Speak with Your House'):
     if resident_name and question:
         # Initialize log files
         csv_file, json_file = initialize_log_files()
-        
-        # Get response
-        response, unique_files, chunk_info = get_house_response(
-            resident_name.strip(),
-            selected_room,
-            question.strip()
-        )
-        
-        # Update all logs
-        update_chat_logs(
-            resident_name=resident_name.strip(),
-            room=selected_room,
-            question=question.strip(),
-            response=response,
-            unique_files=unique_files,
-            chunk_info=chunk_info,
-            csv_file=csv_file,
-            json_file=json_file
-        )
-        
-        # Play sound
-        ding_sound.play()
-        
-        # Display response
-        st.markdown(f"**House Spirit:** {html.escape(response)}", unsafe_allow_html=True)
-        if unique_files:
-            st.markdown(f"**Memory Sources:** {' - '.join(html.escape(file) for file in unique_files)}", unsafe_allow_html=True)
-        if chunk_info:
-            st.markdown(f"**Memory Relevance:** {' - '.join(html.escape(chunk) for chunk in chunk_info)}", unsafe_allow_html=True)
+
+        if use_streaming:
+            # Streaming mode
+            st.markdown("**House Spirit:**")
+            response_placeholder = st.empty()
+            full_response = ""
+            unique_files = []
+            chunk_info = []
+
+            # Get streaming response
+            for update in get_house_response_streaming(
+                resident_name.strip(),
+                selected_room,
+                question.strip()
+            ):
+                full_response += update['chunk']
+                unique_files = update['filenames']
+                chunk_info = update['chunk_info']
+
+                # Update the display with accumulated response
+                response_placeholder.markdown(html.escape(full_response), unsafe_allow_html=True)
+
+                if update['done']:
+                    break
+
+            # Play sound when complete
+            ding_sound.play()
+
+            # Update all logs
+            update_chat_logs(
+                resident_name=resident_name.strip(),
+                room=selected_room,
+                question=question.strip(),
+                response=full_response,
+                unique_files=unique_files,
+                chunk_info=chunk_info,
+                csv_file=csv_file,
+                json_file=json_file
+            )
+
+            # Display metadata
+            if unique_files:
+                st.markdown(f"**Memory Sources:** {' - '.join(html.escape(file) for file in unique_files)}", unsafe_allow_html=True)
+            if chunk_info:
+                st.markdown(f"**Memory Relevance:** {' - '.join(html.escape(chunk) for chunk in chunk_info)}", unsafe_allow_html=True)
+        else:
+            # Non-streaming mode (original)
+            response, unique_files, chunk_info = get_house_response(
+                resident_name.strip(),
+                selected_room,
+                question.strip()
+            )
+
+            # Update all logs
+            update_chat_logs(
+                resident_name=resident_name.strip(),
+                room=selected_room,
+                question=question.strip(),
+                response=response,
+                unique_files=unique_files,
+                chunk_info=chunk_info,
+                csv_file=csv_file,
+                json_file=json_file
+            )
+
+            # Play sound
+            ding_sound.play()
+
+            # Display response
+            st.markdown(f"**House Spirit:** {html.escape(response)}", unsafe_allow_html=True)
+            if unique_files:
+                st.markdown(f"**Memory Sources:** {' - '.join(html.escape(file) for file in unique_files)}", unsafe_allow_html=True)
+            if chunk_info:
+                st.markdown(f"**Memory Relevance:** {' - '.join(html.escape(chunk) for chunk in chunk_info)}", unsafe_allow_html=True)
 
 # Chat history button
 if st.button('Show House Memories'):
