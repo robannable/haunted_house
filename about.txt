@@ -1,5 +1,5 @@
 <em>/home</em>
 
-This project uses a Large Language Model (LLM) to simulate a conversation with a house. Responses are a combination of information present in the model's dataset plus chosen documents related to their work and associated texts, using Retrieval Augmented Generation (RAG) to fine tune the knowledge base.
+This project uses Anthropic's Claude AI to simulate a conversation with a house. Responses are generated using Retrieval Augmented Generation (RAG), combining Claude's intelligence with relevant documents from the house's history, design specifications, and past conversations.
 
-Coded with the assistance of <a href="https://www.perplexity.ai/">Perplexity AI and API service</a>.
+Powered by <a href="https://www.anthropic.com/">Anthropic Claude</a> and coded with the assistance of <a href="https://www.perplexity.ai/">Perplexity AI</a>.
