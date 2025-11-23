@@ -43,7 +43,7 @@ An AI-powered chatbot that personifies your house as a caring spirit with knowle
    ```bash
    cp .env.example .env
    # Edit .env and add your Anthropic API key
-   # Optionally customize the Claude model (default: claude-3-5-sonnet-20241022)
+   # Optionally customize the Claude model (default: claude-sonnet-4-5-20250929)
    ```
 
 5. **Run the application**
@@ -83,19 +83,17 @@ Configure which Claude model to use in your `.env` file:
 
 ```bash
 # Choose your Claude model
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022  # Default: Best balance
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250929  # Default: Latest and most capable
 
 # Other options:
-# ANTHROPIC_MODEL=claude-3-opus-20240229      # Most capable, slower, more expensive
-# ANTHROPIC_MODEL=claude-3-sonnet-20240229    # Balanced performance
-# ANTHROPIC_MODEL=claude-3-haiku-20240307     # Fastest, most affordable
+# ANTHROPIC_MODEL=claude-3-5-haiku-20241022     # Fastest, most affordable
+# ANTHROPIC_MODEL=claude-3-5-sonnet-20241022    # Previous generation, good balance
 ```
 
 **Model Comparison:**
-- **Claude 3.5 Sonnet** (default): Best choice for most users - excellent intelligence with good speed
-- **Claude 3 Opus**: Use when you need maximum reasoning capability for complex questions
-- **Claude 3 Sonnet**: Good balance of speed and capability for general use
-- **Claude 3 Haiku**: Choose for fastest responses and lower costs on simple queries
+- **Claude Sonnet 4.5** (default): Latest and most capable model - best intelligence and reasoning
+- **Claude 3.5 Haiku**: Choose for fastest responses and lower costs on simple queries
+- **Claude 3.5 Sonnet**: Previous generation - good balance of speed and capability
 
 ### Knowledge Base
 
@@ -120,10 +118,9 @@ Supported formats:
 
 2. **LLM Integration**
    - Anthropic Claude API with configurable models:
-     - Claude 3.5 Sonnet (default) - Best balance of intelligence and speed
-     - Claude 3 Opus - Maximum capability for complex reasoning
-     - Claude 3 Sonnet - Good balance of speed and intelligence
-     - Claude 3 Haiku - Fastest responses for simple queries
+     - Claude Sonnet 4.5 (default) - Latest and most capable, best intelligence and reasoning
+     - Claude 3.5 Haiku - Fastest responses for simple queries
+     - Claude 3.5 Sonnet - Previous generation, good balance of speed and capability
    - Supports both streaming and non-streaming modes
    - Custom system prompts configure the house personality
 
@@ -222,7 +219,7 @@ streamlit run house.py
 **Slow first response**
 - First run downloads the sentence-transformer model (~80MB)
 - Subsequent runs use cached model
-- Consider using Claude 3 Haiku for faster responses
+- Consider using Claude 3.5 Haiku for faster responses
 
 **OCR not working**
 - Install tesseract: `brew install tesseract` (Mac) or `apt-get install tesseract-ocr` (Linux)

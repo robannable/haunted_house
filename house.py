@@ -20,7 +20,7 @@ from typing import Optional, List, Dict, Tuple
 # Load environment variables
 load_dotenv()
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-5-20250929')
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables. Please check your .env file.")
